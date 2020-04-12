@@ -9,6 +9,8 @@ from skimage import feature
 
 from skimage import io
 
+# import imutils
+
 #_______________________________________
 # For finding edges
 
@@ -59,10 +61,22 @@ def apply_kernel(img):
     return ans
 
 
+
+
+def rotate_image(image, angle):
+  image_center = tuple(np.array(image.shape[1::-1]) / 2)
+  rot_mat = cv2.getRotationMatrix2D(image_center, angle, 1.0)
+  result = cv2.warpAffine(image, rot_mat, image.shape[1::-1], flags=cv2.INTER_LINEAR)
+  return result
+
+
+
+
+
 def main():
     photo_dir = './photos'
     result_name = './results/project_test102c.avi'
-    n = -1
+    n = 5
 
     photo_files = []
     for p in Path(photo_dir).iterdir():
@@ -77,20 +91,20 @@ def main():
     orig_imgs = []
     img_ffts = []
     shift = []
+    best_angles = []
     img = cv2.imread(photo_files[0])
     height, width, layers = img.shape
     pooln = 2
-    # height = int(height/(pooln**2))
-    # width = int(width/(pooln**2))
     size = (width, height)
 
-    # par_img = cv2.imread(photo_files[0])/len(photo_files)
-    # for i, photo_file in enumerate(photo_files[1:]):
-    #     par_img += cv2.imread(photo_file)/len(photo_files)
-    # par_img = par_img.astype(np.uint8) 
-    # cv2.imwrite("filename.jpg", par_img) 
-    # raise(Exception("SAS"))
-        # print(img.shape)
+    diagonal_filter = np.ones((height, width))
+    for i, a in enumerate(diagonal_filter):
+        for j, b in enumerate(a):
+            if (height-i)/(j+1) > height/width:
+                diagonal_filter[i, j] = 0
+
+
+
 
     for i, photo_file in enumerate(photo_files[0:n]):
         print(i)
@@ -99,113 +113,85 @@ def main():
         imgsc = io.imread(photo_file, as_gray=True)
 
 
-        # img = apply_kernel(img)
-        # img = threshold(img)
-        # img = apply_kernel(img)
-        # img = find_edges(img)
-        # img = getBordered(img, 10)
+
         img = feature.canny(imgsc, sigma=5).astype(np.float)*255
-        # img = np.multiply(resc, 255*np.ones((height, width)))
-        # img /= np.max(img)
-        # img = resc
-        # img_res = feature.canny(imgsc, sigma=0.0001)
-        # for a in img_res:
-        #     for b in a:
-        #         if b:
-        #             print(b)
+
         img = apply_kernel(img)
         img = img*(255/np.max(img))
         img = apply_kernel(img)
         img = img*(255/np.max(img))
 
-
-        # img = skimage.measure.block_reduce(img, (pooln,pooln), np.max)
-        # for j in range(0):
-        #     img, img2 = np.gradient(img)
-        #     img = np.absolute(img)
-        #     img += np.absolute(img2)
-        # # img /= np.max(img)
-        # # img *= 255
-        # img = img.astype(np.uint8) 
-        # img = skimage.measure.block_reduce(img, (pooln,pooln), np.max)
+        img = np.multiply(diagonal_filter, img)
+        # img = diagonal_filter
 
 
+        if i != 0:
+            max_x = 0
+            max_y = 0
+            MAX_corr = 0
+            max_angle = 0
+            for angle in np.arange(-2, 3, 0.2):
+                # rotated = imutils.rotate(img, angle)
+                rotated = rotate_image(img, angle)
 
-        # print(np.max(img))
-        # print(img.shape)
-        # img = np.multiply((np.ma.masked_where(img>200, img)).mask, img)
-        # img = cv2.bitwise_not(img)
 
-        # fimg = img-127
-        # print(img)
-        # print(img.shape)
-        # img = img[:,:,2:3]
-        # print(img.shape)
+                img_fft = (np.fft.fft2(rotated))
+                img_ffts.append(img_fft)
 
-        # raise(Exception("SAS"))
-        # img = cv2.normalize(img,  img, 0, 255, cv2.NORM_MINMAX)
-        # print(img.shape)
-        img_fft = (np.fft.fft2(img))#np.fft.fftshift
-        # print(img_fft.shape)
-        img_ffts.append(img_fft)
-        # if i > 0:
-            # if i == 1:
-            # print(type(img_fft))
-        parent_fft = img_ffts[0]
-        corr = np.absolute(np.fft.fftshift(np.fft.ifft2(np.multiply(parent_fft, np.conjugate(img_ffts[-1])))))#
-        # corr = scipy.signal.medfilt2d(corr)
-        max_x, max_y = np.unravel_index(np.argmax(corr, axis=None), corr.shape)
-        # print(max_x, max_y)
-        shift.append((int(max_x-height/2), int(max_y-width/2)))
-            # shift.append((0,0))
+                # print(-1-int(bool(orig_imgs)))
+                parent_fft = img_ffts[0]
+                corr = np.absolute(np.fft.fftshift(np.fft.ifft2(np.multiply(parent_fft, np.conjugate(img_ffts[-1])))))#
+                # corr = scipy.signal.medfilt2d(corr)
+                cur_m_corr = np.max(corr)
+                print(cur_m_corr)
+                # print("AAA")
+                if MAX_corr < cur_m_corr:
+                    MAX_corr = cur_m_corr
+                    max_angle = angle
+                    max_x, max_y = np.unravel_index(np.argmax(corr, axis=None), corr.shape)
+                
+                # print(max_x, max_y)
+                    # shift.append((0,0))
 
-        # if i == 3:  
-        #     # X, Y = np.meshgrid(range(size[0]), range(size[1]))
-        #     # fig = plt.figure(figsize=(6,6))
-        #     # ax = fig.add_subplot(111, projection='3d')
-        #     # ax.plot_surface(X, Y, corr)
-        #     plt.imshow(corr)
-        #     plt.show()
+                # if i == 3:  
+                #     # X, Y = np.meshgrid(range(size[0]), range(size[1]))
+                #     # fig = plt.figure(figsize=(6,6))
+                #     # ax = fig.add_subplot(111, projection='3d')
+                #     # ax.plot_surface(X, Y, corr)
+                # plt.imshow(corr)
+                # plt.show()
+            best_angles.append(max_angle)
+            shift.append((int(max_x-height/2), int(max_y-width/2)))
 
-        # for j in range(img.shape[0]):
-        #     for k in range(img.shape[1]):
-        #         if img[j][k] == 256:
-        #             img[j][k] = 254
-        #             print(".", end="")
-        # print(shift[-1][0])
-        # print(shift[-1][1])
-        M = np.float32([[1,0,shift[-1][0]],[0,1,shift[-1][1]]])
-        img = cv2.warpAffine(img,M,size)
-        img_orig = cv2.warpAffine(img_orig,M,size)
-
+            M = np.float32([[1,0,shift[-1][0]],[0,1,shift[-1][1]]])
+            img = cv2.warpAffine(rotate_image(img, best_angles[-1]),M,size)
+            img_orig = cv2.warpAffine(rotate_image(img_orig, best_angles[-1]),M,size)
         
-        img = np.stack((img,img, img), axis=2)
-        # print(img.shape)
-        # imgs.append(img)
+        else:
+            img_fft = (np.fft.fft2(img))
+            img_ffts.append(img_fft)
+
+
+        img = np.stack((img, img, img), axis=2)
+
         orig_imgs.append(img_orig)
         imgs.append(img)
 
-    # print(shift)
+    print(best_angles)
 
     out = cv2.VideoWriter(result_name,cv2.VideoWriter_fourcc(*'DIVX'), 2, size)
 
-    # for i, img in enumerate(imgs):
-    #     print(i)
-    #     cv2.imwrite("./results/2img" + str(i)+".jpg", img)
-
-
-    for i, img in enumerate(imgs):#orig_imgs
+    for i, img in enumerate(imgs):
         print(i)
-        out.write(img)
-    out.release()
+        cv2.imwrite("./results/2img" + str(i)+".jpg", img)
+
+
+    # for i, img in enumerate(imgs):#orig_imgs
+    #     print(i)
+    #     out.write(img)
+    # out.release()
 
     # print(imgs[0])
 
 if __name__ == '__main__':
     main()
-
-
-
-
-
- 
